@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       openssl_version:
-        description: 'OpenSSL version to build (e.g., openssl-3.4.1)'
+        description: 'OpenSSL version to build (e.g., openssl-3.1.3)'
         required: true
         default: 'openssl-3.1.3'
 
@@ -15,12 +15,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # VS 2017 requires the windows-2019 runner and toolset 14.16
+          # VS 2017: uses windows-2019 runner and specific toolset 14.16
           - vs-version: "2017"
             os: windows-2019
             toolset_version: "14.16"
-          # VS 2022 requires the windows-2022 runner. 
-          # Leaving toolset empty picks the latest v143 toolset automatically.
+          # VS 2022: uses windows-2022 runner. Empty toolset picks latest v143/v144.
           - vs-version: "2022"
             os: windows-2022
             toolset_version: ""
@@ -40,8 +39,18 @@ jobs:
           toolset: ${{ matrix.toolset_version }}
           arch: x64
 
+      - name: Verify Build Dependencies
+        shell: pwsh
+        run: |
+          Write-Host "--- Checking Perl Version ---"
+          perl -v
+          Write-Host "--- Checking Perl Location ---"
+          where.exe perl
+          Write-Host "--- Checking NASM (for optimized assembly) ---"
+          nasm -v
+
       - name: Configure OpenSSL
-        # We target the requested C:/prg/openssl path
+        # Targeting the specific path C:/prg/openssl
         run: |
           perl Configure VC-WIN64A --prefix=C:/prg/openssl --openssldir=C:/prg/openssl/ssl no-docs
 
@@ -86,9 +95,9 @@ jobs:
             ## OpenSSL Automated Build
             - **Version:** `${{ github.event.inputs.openssl_version }}`
             - **Architecture:** Windows x64
-            - **Compilers:** Visual Studio 2017 & 2022
+            - **Compilers:** Visual Studio 2017 (v141) & 2022 (v143/v144)
             
-            Compiled and installed to `C:/prg/openssl`.
+            **Installation Path:** `C:/prg/openssl`
           files: |
             zip-vs2017/*.zip
             zip-vs2022/*.zip

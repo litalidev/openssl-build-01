@@ -1,0 +1,97 @@
+name: OpenSSL Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      openssl_version:
+        description: 'OpenSSL version to build (e.g., openssl-3.4.1, openssl-3.0.15)'
+        required: true
+        default: 'openssl-3.4.1'
+
+jobs:
+  build-windows:
+    name: Build (VS ${{ matrix.vs-version }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vs-version: "2017"
+            os: windows-2019
+          - vs-version: "2022"
+            os: windows-2022
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout OpenSSL Source
+        uses: actions/checkout@v4
+        with:
+          repository: openssl/openssl
+          ref: ${{ github.event.inputs.openssl_version }}
+
+      - name: Setup MSVC (VS ${{ matrix.vs-version }})
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          toolset: ${{ matrix.vs-version }}
+          arch: x64
+
+      - name: Configure OpenSSL
+        # Using forward slashes for the prefix as required by OpenSSL's perl script
+        run: |
+          perl Configure VC-WIN64A --prefix=C:/prg/openssl --openssldir=C:/prg/openssl/ssl no-docs
+
+      - name: Compile
+        run: nmake
+
+      - name: Install to C:/prg/openssl
+        run: nmake install
+
+      - name: Verify Installation Structure
+        shell: pwsh
+        run: |
+          Write-Host "Verifying files in C:/prg/openssl..."
+          Get-ChildItem -Path C:/prg/openssl -Recurse | Select-Object FullName
+
+      - name: Archive Build Files
+        # Zipping the folder for the release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path C:/prg/openssl/* -DestinationPath openssl-${{ github.event.inputs.openssl_version }}-vs${{ matrix.vs-version }}.zip
+
+      - name: Upload Artifact (Internal)
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-vs${{ matrix.vs-version }}
+          path: openssl-${{ github.event.inputs.openssl_version }}-vs${{ matrix.vs-version }}.zip
+          retention-days: 1
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Zips
+        uses: actions/download-artifact@v4
+
+      - name: Generate Release Tag
+        id: tag
+        run: echo "release_tag=${{ github.event.inputs.openssl_version }}-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: OpenSSL ${{ github.event.inputs.openssl_version }}
+          body: |
+            ## OpenSSL Automated Build
+            **Version:** `${{ github.event.inputs.openssl_version }}`
+            **Architecture:** Windows x64
+            **Compilers:** - Visual Studio 2017 (v141)
+            - Visual Studio 2022 (v143)
+            
+            Compiled and installed to `C:/prg/openssl`.
+          files: |
+            zip-vs2017/*.zip
+            zip-vs2022/*.zip

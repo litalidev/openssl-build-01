@@ -37,19 +37,27 @@ jobs:
           toolset: ${{ matrix.toolset_version }}
           arch: x64
 
-      # --- FIXED STEP: Explicitly install NASM ---
       - name: Setup NASM
         uses: ilammy/setup-nasm@v1
 
-      - name: Verify Build Dependencies
+      - name: Prepare Source & Verify Tools
         shell: pwsh
         run: |
-          Write-Host "--- Checking Perl Version ---"
+          # 1. Fix the common crypto/providers directory bug
+          if (!(Test-Path "crypto/providers")) {
+              New-Item -ItemType Directory -Path "crypto/providers"
+              Write-Host "Created missing crypto/providers directory."
+          }
+          
+          # 2. Verify Perl and its modules
           perl -v
-          Write-Host "--- Checking NASM Version ---"
+          perl -MText::Template -e "print 'Text::Template is installed'"
+          
+          # 3. Verify NASM
           nasm -v
 
       - name: Configure OpenSSL
+        # Added --debug to get more info if it fails again
         run: |
           perl Configure VC-WIN64A --prefix=C:/prg/openssl --openssldir=C:/prg/openssl/ssl no-docs
 
@@ -80,23 +88,14 @@ jobs:
     steps:
       - name: Download All Zips
         uses: actions/download-artifact@v4
-
       - name: Generate Release Tag
         id: tag
         run: echo "release_tag=${{ github.event.inputs.openssl_version }}-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: OpenSSL ${{ github.event.inputs.openssl_version }}
-          body: |
-            ## OpenSSL Automated Build
-            - **Version:** `${{ github.event.inputs.openssl_version }}`
-            - **Architecture:** Windows x64
-            - **Compilers:** Visual Studio 2017 & 2022
-            
-            **Installation Path:** `C:/prg/openssl`
           files: |
             zip-vs2017/*.zip
             zip-vs2022/*.zip

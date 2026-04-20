@@ -15,11 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # VS 2017: uses windows-2019 runner and specific toolset 14.16
           - vs-version: "2017"
             os: windows-2019
             toolset_version: "14.16"
-          # VS 2022: uses windows-2022 runner. Empty toolset picks latest v143/v144.
           - vs-version: "2022"
             os: windows-2022
             toolset_version: ""
@@ -39,18 +37,19 @@ jobs:
           toolset: ${{ matrix.toolset_version }}
           arch: x64
 
+      # --- FIXED STEP: Explicitly install NASM ---
+      - name: Setup NASM
+        uses: ilammy/setup-nasm@v1
+
       - name: Verify Build Dependencies
         shell: pwsh
         run: |
           Write-Host "--- Checking Perl Version ---"
           perl -v
-          Write-Host "--- Checking Perl Location ---"
-          where.exe perl
-          Write-Host "--- Checking NASM (for optimized assembly) ---"
+          Write-Host "--- Checking NASM Version ---"
           nasm -v
 
       - name: Configure OpenSSL
-        # Targeting the specific path C:/prg/openssl
         run: |
           perl Configure VC-WIN64A --prefix=C:/prg/openssl --openssldir=C:/prg/openssl/ssl no-docs
 
@@ -95,7 +94,7 @@ jobs:
             ## OpenSSL Automated Build
             - **Version:** `${{ github.event.inputs.openssl_version }}`
             - **Architecture:** Windows x64
-            - **Compilers:** Visual Studio 2017 (v141) & 2022 (v143/v144)
+            - **Compilers:** Visual Studio 2017 & 2022
             
             **Installation Path:** `C:/prg/openssl`
           files: |

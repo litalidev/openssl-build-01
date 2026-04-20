@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       openssl_version:
-        description: 'OpenSSL version to build (e.g., openssl-3.4.1, openssl-3.0.15)'
+        description: 'OpenSSL version to build (e.g., openssl-3.4.1)'
         required: true
         default: 'openssl-3.4.1'
 
@@ -15,10 +15,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # VS 2017 requires the windows-2019 runner and toolset 14.16
           - vs-version: "2017"
             os: windows-2019
+            toolset_version: "14.16"
+          # VS 2022 requires the windows-2022 runner. 
+          # Leaving toolset empty picks the latest v143 toolset automatically.
           - vs-version: "2022"
             os: windows-2022
+            toolset_version: ""
 
     runs-on: ${{ matrix.os }}
 
@@ -32,28 +37,21 @@ jobs:
       - name: Setup MSVC (VS ${{ matrix.vs-version }})
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          toolset: ${{ matrix.vs-version }}
+          toolset: ${{ matrix.toolset_version }}
           arch: x64
 
       - name: Configure OpenSSL
-        # Using forward slashes for the prefix as required by OpenSSL's perl script
+        # We target the requested C:/prg/openssl path
         run: |
           perl Configure VC-WIN64A --prefix=C:/prg/openssl --openssldir=C:/prg/openssl/ssl no-docs
 
       - name: Compile
         run: nmake
 
-      - name: Install to C:/prg/openssl
+      - name: Install
         run: nmake install
 
-      - name: Verify Installation Structure
-        shell: pwsh
-        run: |
-          Write-Host "Verifying files in C:/prg/openssl..."
-          Get-ChildItem -Path C:/prg/openssl -Recurse | Select-Object FullName
-
       - name: Archive Build Files
-        # Zipping the folder for the release
         shell: pwsh
         run: |
           Compress-Archive -Path C:/prg/openssl/* -DestinationPath openssl-${{ github.event.inputs.openssl_version }}-vs${{ matrix.vs-version }}.zip
@@ -86,10 +84,9 @@ jobs:
           name: OpenSSL ${{ github.event.inputs.openssl_version }}
           body: |
             ## OpenSSL Automated Build
-            **Version:** `${{ github.event.inputs.openssl_version }}`
-            **Architecture:** Windows x64
-            **Compilers:** - Visual Studio 2017 (v141)
-            - Visual Studio 2022 (v143)
+            - **Version:** `${{ github.event.inputs.openssl_version }}`
+            - **Architecture:** Windows x64
+            - **Compilers:** Visual Studio 2017 & 2022
             
             Compiled and installed to `C:/prg/openssl`.
           files: |
